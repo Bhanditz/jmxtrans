@@ -23,13 +23,12 @@ import java.nio.channels.DatagramChannel;
 import java.util.List;
 import java.util.Map;
 
-import static java.lang.String.format;
-
 public class DogStatsDWriter extends BaseOutputWriter
 {
     private static final Logger log = LoggerFactory.getLogger(DogStatsDWriter.class);
 
     public static final String ROOT_PREFIX = "rootPrefix";
+    private static final String TAGS = "tags";
     private ByteBuffer sendBuffer;
     private String host;
     private Integer port;
@@ -138,6 +137,11 @@ public class DogStatsDWriter extends BaseOutputWriter
             throw new ValidationException("Host and port can't be null", query);
         }
 
+        if (this.getSettings().get(TAGS) != null) {
+            List<String> tags = (List<String>)this.getSettings().get(TAGS);
+            this.tags = tags.toArray(new String[tags.size()]);
+        }
+
         String rootPrefixTmp = (String) this.getSettings().get(ROOT_PREFIX);
         if (rootPrefixTmp != null) {
             rootPrefix = rootPrefixTmp;
@@ -148,10 +152,6 @@ public class DogStatsDWriter extends BaseOutputWriter
         if (this.getSettings().containsKey(BUCKET_TYPE)) {
             bucketType = (String) this.getSettings().get(BUCKET_TYPE);
         }
-
-        tags = new String[]{
-                format("service:%s", query.getServer().getAlias())
-        };
     }
 
     public void doWrite(Query query) throws Exception {
