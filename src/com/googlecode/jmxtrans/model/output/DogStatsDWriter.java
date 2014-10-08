@@ -10,6 +10,9 @@ import com.googlecode.jmxtrans.util.DatagramSocketFactory;
 import com.googlecode.jmxtrans.util.JmxUtils;
 import com.googlecode.jmxtrans.util.LifecycleException;
 import com.googlecode.jmxtrans.util.ValidationException;
+import groovy.lang.Binding;
+import groovy.lang.GroovyShell;
+import groovy.lang.Script;
 import org.apache.commons.pool.KeyedObjectPool;
 import org.apache.commons.pool.impl.GenericKeyedObjectPool;
 import org.slf4j.Logger;
@@ -26,6 +29,8 @@ import java.util.Map;
 public class DogStatsDWriter extends BaseOutputWriter
 {
     private static final Logger log = LoggerFactory.getLogger(DogStatsDWriter.class);
+    private static final String BUCKET_TYPE = "bucketType";
+    private static final String TRANSFORM = "transform";
 
     public static final String ROOT_PREFIX = "rootPrefix";
     private static final String TAGS = "tags";
@@ -38,12 +43,12 @@ public class DogStatsDWriter extends BaseOutputWriter
     private SocketAddress address;
     private final DatagramChannel channel;
 
-    private static final String BUCKET_TYPE = "bucketType";
-
     private KeyedObjectPool pool;
     private ManagedObject mbean;
     private DatagramChannel clientChannel;
     private String[] tags;
+    private String transfromInstruction;
+    private Script script = null;
 
     /**
      * Uses JmxUtils.getDefaultPoolMap()
@@ -152,6 +157,14 @@ public class DogStatsDWriter extends BaseOutputWriter
         if (this.getSettings().containsKey(BUCKET_TYPE)) {
             bucketType = (String) this.getSettings().get(BUCKET_TYPE);
         }
+
+        if (this.getSettings().containsKey(TRANSFORM)) {
+            GroovyShell groovyShell = new GroovyShell();
+            String transformString = getStringSetting(TRANSFORM, null);
+            if (transformString != null) {
+                script = groovyShell.parse(transformString);
+            }
+        }
     }
 
     public void doWrite(Query query) throws Exception {
@@ -166,28 +179,61 @@ public class DogStatsDWriter extends BaseOutputWriter
             Map<String, Object> resultValues = result.getValues();
             if (resultValues != null) {
                 for (Map.Entry<String, Object> values : resultValues.entrySet()) {
-                    if (JmxUtils.isNumeric(values.getValue())) {
-                        StringBuilder sb = new StringBuilder();
+                    Object currentValue = values.getValue();
+                    if (script != null) {
+                        Binding binding = new Binding();
+                        binding.setVariable("value", currentValue);
+                        script.setBinding(binding);
+                        Object scriptResult = script.run();
 
-                        sb.append(JmxUtils.getKeyString(query, result, values, typeNames, rootPrefix));
-
-                        sb.append(":");
-                        sb.append(values.getValue().toString());
-                        sb.append("|");
-                        sb.append(bucketType);
-                        sb.append(tagString(tags));
-                        sb.append("\n");
-
-                        String line = sb.toString();
-
-                        if (isDebugEnabled()) {
-                            log.debug("StatsD Message: " + line.trim());
+                        if (scriptResult instanceof Map) {
+                            try {
+                                Map<String, Object> newResults = (Map<String, Object>) scriptResult;
+                                for (Map.Entry<String, Object> entry : newResults.entrySet()) {
+                                    Result newResult = new Result(result.getAttributeName());
+                                    newResult.setClassName(result.getClassName());
+                                    newResult.setEpoch(result.getEpoch());
+                                    newResult.setQuery(result.getQuery());
+                                    newResult.setTypeName(result.getTypeName());
+                                    newResult.setValues(newResults);
+                                    sendResult(query, typeNames, newResult, entry, entry.getValue());
+                                }
+                                return;
+                            } catch (ClassCastException e) {
+                                log.error("Error when reading result of custom transform", e);
+                            }
+                        } else {
+                            currentValue = scriptResult;
                         }
-
-                        doSend(line.trim());
                     }
+
+                    sendResult(query, typeNames, result, values, currentValue);
                 }
             }
+        }
+    }
+
+    private void sendResult(Query query, List<String> typeNames, Result result, Map.Entry<String, Object> values, Object currentValue)
+    {
+        if (JmxUtils.isNumeric(currentValue)) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append(JmxUtils.getKeyString(query, result, values, typeNames, rootPrefix));
+
+            sb.append(":");
+            sb.append(currentValue.toString());
+            sb.append("|");
+            sb.append(bucketType);
+            sb.append(tagString(tags));
+            sb.append("\n");
+
+            String line = sb.toString();
+
+            if (isDebugEnabled()) {
+                log.debug("StatsD Message: " + line.trim());
+            }
+
+            doSend(line.trim());
         }
     }
 
