@@ -17,7 +17,18 @@
         <appender-ref ref="fileAppender" />
     </appender>
 
-    <appender name="fileAppender" class="org.apache.log4j.DailyRollingFileAppender">
+    <appender name="fileAppender" class="org.apache.log4j.RollingFileAppender">
+        <param name="File" value="${jmxtrans.log.dir}/jmxtrans.log"/>
+        <param name="Append" value="true"/>
+        <param name="maxBackupIndex" value="10"/>
+        <param name="maxFileSize" value="50MB"/>
+        <layout class="org.apache.log4j.PatternLayout">
+            <param name="ConversionPattern" value="[%d{dd MMM yyyy HH:mm:ss}] [%t] %-6r %-5p (%C:%L) - %m\n"/>
+        </layout>
+    </appender>
+
+    <!--
+    <appender name="dailyFileAppender" class="org.apache.log4j.DailyRollingFileAppender">
         <param name="File" value="${jmxtrans.log.dir}/jmxtrans.log"/>
         <param name="Append" value="true"/>
         <param name="DatePattern" value="'.'yyyyMMdd"/>
@@ -25,6 +36,7 @@
             <param name="ConversionPattern" value="[%d{dd MMM yyyy HH:mm:ss}] [%t] %-6r %-5p (%C:%L) - %m\n"/>
         </layout>
     </appender>
+   -->
 
     <logger name="com.googlecode.jmxtrans">
         <level value="${jmxtrans.log.level}"/>
