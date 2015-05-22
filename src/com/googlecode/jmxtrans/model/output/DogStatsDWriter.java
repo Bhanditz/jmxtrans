@@ -23,9 +23,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class DogStatsDWriter extends BaseOutputWriter
 {
@@ -166,7 +164,7 @@ public class DogStatsDWriter extends BaseOutputWriter
     }
 
     private String[] getTagsForWriter(Query query) {
-        List<String> tags = new ArrayList<String>();
+        Set<String> tags = new HashSet<String>();
         String alias = query.getServer().getAlias();
         if (alias != null) {    //server alias is put in service tag
             tags.add("service:" + alias);
