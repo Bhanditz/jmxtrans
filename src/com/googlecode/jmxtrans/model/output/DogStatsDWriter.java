@@ -23,6 +23,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -142,10 +143,7 @@ public class DogStatsDWriter extends BaseOutputWriter
             throw new ValidationException("Host and port can't be null", query);
         }
 
-        if (this.getSettings().get(TAGS) != null) {
-            List<String> tags = (List<String>)this.getSettings().get(TAGS);
-            this.tags = tags.toArray(new String[tags.size()]);
-        }
+        this.tags = getTagsForWriter(query);
 
         String rootPrefixTmp = (String) this.getSettings().get(ROOT_PREFIX);
         if (rootPrefixTmp != null) {
@@ -165,6 +163,18 @@ public class DogStatsDWriter extends BaseOutputWriter
                 script = groovyShell.parse(transformString);
             }
         }
+    }
+
+    private String[] getTagsForWriter(Query query) {
+        List<String> tags = new ArrayList<String>();
+        String alias = query.getServer().getAlias();
+        if (alias != null) {    //server alias is put in service tag
+            tags.add("service:" + alias);
+        }
+        if (this.getSettings().get(TAGS) != null) {
+            tags.addAll((List<String>) this.getSettings().get(TAGS));
+        }
+        return tags.toArray(new String[tags.size()]);
     }
 
     public void doWrite(Query query) throws Exception {
@@ -218,7 +228,7 @@ public class DogStatsDWriter extends BaseOutputWriter
         if (JmxUtils.isNumeric(currentValue)) {
             StringBuilder sb = new StringBuilder();
 
-            sb.append(JmxUtils.getKeyString(query, result, values, typeNames, rootPrefix));
+            sb.append(JmxUtils.getKeyString(query, result, values, typeNames));
 
             sb.append(":");
             sb.append(currentValue.toString());
